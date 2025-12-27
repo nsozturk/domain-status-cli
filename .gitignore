@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+*.csv
+!domain_extensions.csv
+*.log
