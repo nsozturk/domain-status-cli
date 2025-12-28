@@ -159,6 +159,82 @@ def append_csv(results: Dict[str, Dict], output: Path) -> None:
             )
 
 
+def append_available_csv(results: Dict[str, Dict], output: Path) -> None:
+    needs_header = not output.exists() or output.stat().st_size == 0
+    with output.open("a", newline="") as f:
+        writer = csv.writer(f)
+        if needs_header:
+            writer.writerow(["domain", "available", "lookupType", "extra_json"])
+        for domain in sorted(results.keys()):
+            resp = results[domain]
+            if str(resp.get("available")).lower() != "true":
+                continue
+            writer.writerow(
+                [
+                    domain,
+                    resp.get("available"),
+                    resp.get("lookupType"),
+                    json.dumps(resp.get("extra"), separators=(",", ":")),
+                ]
+            )
+
+
+def load_prices(path: Path) -> Dict[str, Dict]:
+    data = json.loads(path.read_text())
+    price_by_tld: Dict[str, Dict] = {}
+    for item in data:
+        name = (item.get("Name") or "").strip().lower()
+        pricing = item.get("Pricing") or {}
+        if name:
+            price_by_tld[name] = {
+                "price": pricing.get("Price"),
+                "regular": pricing.get("Regular"),
+                "renewal": pricing.get("Renewal"),
+            }
+    return price_by_tld
+
+
+def append_priced_csv(
+    results: Dict[str, Dict],
+    output: Path,
+    price_by_tld: Dict[str, Dict],
+) -> None:
+    needs_header = not output.exists() or output.stat().st_size == 0
+    with output.open("a", newline="") as f:
+        writer = csv.writer(f)
+        if needs_header:
+            writer.writerow(
+                [
+                    "domain",
+                    "available",
+                    "lookupType",
+                    "extra_json",
+                    "tld",
+                    "price",
+                    "regular",
+                    "renewal",
+                ]
+            )
+        for domain in sorted(results.keys()):
+            resp = results[domain]
+            if str(resp.get("available")).lower() != "true":
+                continue
+            tld = domain.split(".", 1)[1].lower() if "." in domain else ""
+            price = price_by_tld.get(tld, {})
+            writer.writerow(
+                [
+                    domain,
+                    resp.get("available"),
+                    resp.get("lookupType"),
+                    json.dumps(resp.get("extra"), separators=(",", ":")),
+                    tld,
+                    price.get("price"),
+                    price.get("regular"),
+                    price.get("renewal"),
+                ]
+            )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Query Namecheap WebSocket domainStatus and export latest responses."
@@ -198,6 +274,24 @@ def main() -> None:
         action="store_true",
         help="Use --bases as full domains (do not append TLDs).",
     )
+    parser.add_argument(
+        "--available-out",
+        type=Path,
+        default=None,
+        help="Optional CSV path for available-only domains.",
+    )
+    parser.add_argument(
+        "--prices-json",
+        type=Path,
+        default=None,
+        help="Optional JSON file with TLD pricing (domain_prices.json format).",
+    )
+    parser.add_argument(
+        "--priced-out",
+        type=Path,
+        default=None,
+        help="Optional CSV path for available domains with prices.",
+    )
     args = parser.parse_args()
 
     bases = load_bases(args.bases)
@@ -210,6 +304,10 @@ def main() -> None:
     existing = load_existing_domains(args.out)
     if existing:
         print(f"Resume: {len(existing)} domains already in {args.out}")
+
+    price_by_tld = {}
+    if args.prices_json and args.priced_out:
+        price_by_tld = load_prices(args.prices_json)
 
     for base in tqdm(bases, desc="Bases", unit="base"):
         domains_all = build_domains([base], tlds, use_tlds=not args.no_tlds)
@@ -229,6 +327,10 @@ def main() -> None:
             )
         )
         append_csv(base_results, args.out)
+        if args.available_out:
+            append_available_csv(base_results, args.available_out)
+        if args.priced_out and price_by_tld:
+            append_priced_csv(base_results, args.priced_out, price_by_tld)
         existing.update(base_results.keys())
         print(f"Wrote {len(base_results)} rows for {base} to {args.out}")
 
