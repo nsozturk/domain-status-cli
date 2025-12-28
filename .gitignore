@@ -3,4 +3,5 @@ __pycache__/
 *.pyc
 *.csv
 !domain_extensions.csv
+!domain_extensions_by_category.csv
 *.log

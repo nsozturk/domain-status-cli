@@ -194,10 +194,25 @@ def load_prices(path: Path) -> Dict[str, Dict]:
     return price_by_tld
 
 
+def load_categories(path: Path) -> Dict[str, str]:
+    category_by_tld: Dict[str, str] = {}
+    with path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            tld = (row.get("tld") or "").strip().lower()
+            category = (row.get("category") or "").strip()
+            if category.endswith(")") and "(" in category:
+                category = category.rsplit("(", 1)[0].strip()
+            if tld:
+                category_by_tld[tld] = category
+    return category_by_tld
+
+
 def append_priced_csv(
     results: Dict[str, Dict],
     output: Path,
     price_by_tld: Dict[str, Dict],
+    category_by_tld: Dict[str, str] | None = None,
 ) -> None:
     needs_header = not output.exists() or output.stat().st_size == 0
     with output.open("a", newline="") as f:
@@ -210,6 +225,7 @@ def append_priced_csv(
                     "lookupType",
                     "extra_json",
                     "tld",
+                    "category",
                     "price",
                     "regular",
                     "renewal",
@@ -228,6 +244,7 @@ def append_priced_csv(
                     resp.get("lookupType"),
                     json.dumps(resp.get("extra"), separators=(",", ":")),
                     tld,
+                    (category_by_tld or {}).get(tld, ""),
                     price.get("price"),
                     price.get("regular"),
                     price.get("renewal"),
@@ -287,6 +304,12 @@ def main() -> None:
         help="Optional JSON file with TLD pricing (domain_prices.json format).",
     )
     parser.add_argument(
+        "--category-csv",
+        type=Path,
+        default=None,
+        help="Optional CSV file with TLD categories (category,tld).",
+    )
+    parser.add_argument(
         "--priced-out",
         type=Path,
         default=None,
@@ -306,8 +329,11 @@ def main() -> None:
         print(f"Resume: {len(existing)} domains already in {args.out}")
 
     price_by_tld = {}
+    category_by_tld = None
     if args.prices_json and args.priced_out:
         price_by_tld = load_prices(args.prices_json)
+        if args.category_csv:
+            category_by_tld = load_categories(args.category_csv)
 
     for base in tqdm(bases, desc="Bases", unit="base"):
         domains_all = build_domains([base], tlds, use_tlds=not args.no_tlds)
@@ -330,7 +356,12 @@ def main() -> None:
         if args.available_out:
             append_available_csv(base_results, args.available_out)
         if args.priced_out and price_by_tld:
-            append_priced_csv(base_results, args.priced_out, price_by_tld)
+            append_priced_csv(
+                base_results,
+                args.priced_out,
+                price_by_tld,
+                category_by_tld=category_by_tld,
+            )
         existing.update(base_results.keys())
         print(f"Wrote {len(base_results)} rows for {base} to {args.out}")
 
