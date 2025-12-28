@@ -10,6 +10,7 @@ A small Python CLI that queries a domain status WebSocket endpoint and exports t
 - Resume support (skips fully completed bases)
 - Incremental CSV appends after each base completes
 - Progress output in terminal (uses `tqdm` if installed, otherwise a fallback)
+- Optional available-only and priced outputs
 
 ## Requirements
 
@@ -41,6 +42,17 @@ Run:
 python ws_domain_export.py --bases bases.txt --out domain_status.csv
 ```
 
+### Available-only and priced outputs
+
+```bash
+python ws_domain_export.py \
+  --bases bases.txt \
+  --out ws_domain_status.csv \
+  --available-out available_domains.csv \
+  --prices-json domain_prices.json \
+  --priced-out available_domains_priced.csv
+```
+
 ### Options
 
 - `--bases`: Path to base names file (required)
@@ -49,15 +61,29 @@ python ws_domain_export.py --bases bases.txt --out domain_status.csv
 - `--batch-size`: Domains per request batch (default: 50)
 - `--idle-timeout`: Seconds to wait without messages (default: 5.0)
 - `--no-tlds`: Treat bases as full domains (do not append TLDs)
+- `--available-out`: Optional CSV path for available-only domains
+- `--prices-json`: Optional JSON file with TLD pricing (domain_prices.json format)
+- `--priced-out`: Optional CSV path for available domains with prices
 
 ## Output
 
-CSV columns:
+CSV columns for the main output:
 
 - `domain`
 - `available`
 - `lookupType`
 - `extra_json`
+
+CSV columns for the priced output:
+
+- `domain`
+- `available`
+- `lookupType`
+- `extra_json`
+- `tld`
+- `price`
+- `regular`
+- `renewal`
 
 ## License
 
